@@ -1,0 +1,147 @@
+---
+title: "index"
+author: "Rodrigo"
+date: "27 de dezembro de 2015"
+output: html_document
+---
+---
+title: "MachineLearning"
+author: "Rodrigo"
+date: "23 de dezembro de 2015"
+output: html_document
+---
+
+###Summary:
+
+**This report is dedicated to predict the correct execution of a Weight Lifting Exercise. The database is obtained from a PUC-Rio study with 6 volunteers, based on a series of measurements from sensors attached to the arm, belt, glove and dumbbell that is part of the exercise. After performing diferent analysis we selected a Random Forest Model**
+
+
+### Loading and filtering the data
+
+The first step is to load both the training and testing sets of the data and the CARET package that will be used to estimate the predictions. The testing data contains only 20 observation that will be used afterwards for the validation of the model.
+
+The training data contains 19622 observations of 160 variables. The "classe" variable is the outcome of the exercise.
+
+```{r}
+library(caret)
+set.seed(1)
+training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+```
+
+After loading the data, to obtain the variables used to predict the activity we need to ensure that we only use those which are available on the TESTING database. Otherwise we won't be able to apply the model to the TESTING data.
+
+```{r, echo=FALSE}
+str(testing)
+```
+
+Inspecting the **testing data** we see that all the transformations/statistics of variables measurements (average, sd, kurtosis, etcetera) are missing from the data (output not shown here to save space!). So we construct a new database testingNonNA that drop those empty variables. 
+
+After dropping the NA variables the remaining 60 are futher reduced to eliminate other variables like ID problem, num_window, etc. The final count of features to be used are 53.
+
+
+```{r}
+testingNonNA<-Filter(function(x)!all(is.na(x)),testing)  ##This command filters the columns with all NAs !
+names(testingNonNA)
+var<-names(testingNonNA)[8:59]  #This command selects only features related to measurements, not window counts or participants!
+var<-c(var,"classe")  #Including the "classe" variable to the list
+trainingVar<-training[,var]
+```
+
+
+
+### Cross-validation:
+
+To get a better prediction we split the TRAINING database of 19622 rows into futher training and testing databases. Since the data is big enough we maximise the size of the TEST data and split the original training data into 90% TEST and 10% TRAINING and train the model only on this new training data.
+
+```{r}
+set.seed(1)
+inTrain <- createDataPartition(y=trainingVar$classe,p=0.1, list=FALSE)
+training10<-trainingVar[inTrain,]
+testing90<-trainingVar[-inTrain,]
+
+```
+
+
+After the split of 10% of observation to the new training dataset, we begin to train the models and see if they have a good fit.
+
+### Models:
+
+The first model tested is a **Random Forest** model, the choice is motivated by the fact that we have 5 types of execution to predict (A,B,C,D,E) and so the outcome is not continuous for a simple regression model. More to the point that is one of the models tried in the original paper!(see Velloso et alli 2013).
+
+```{r, cache=TRUE}
+
+# The first model is the Random Forest model, the same type of model the authors of the original study were using!
+
+set.seed(1)
+modelrf<-train(classe~.,data=training10,method = "rf",prox=TRUE)
+modelrf
+
+predrf<-predict(modelrf,training10)
+confusionMatrix(predrf,training10$classe)
+
+```
+
+We can see that the model has a good fit as it's accuracy is greater than 90%. 
+
+The best resample show that the number of variables to split in each node is 2 (mtry=2).
+
+The confusion Matrix shows a perfect fit for the in-sample data.
+
+
+The second model tested is a **decision tree model**
+
+```{r, cache=TRUE}
+set.seed(1)
+modelrpart<-train(classe~.,data=training10,method = "rpart")
+modelrpart
+
+predRpart<-predict(modelrpart,training10)
+confusionMatrix(predRpart,training10$classe)
+
+```
+
+The results point to a low accuracy for the CART model, only about 50%
+
+The third model tested is a **Linear Discriminant Analysis**
+
+```{r}
+set.seed(1)
+modelLda<-train(classe~.,data=training10,method = "lda")
+modelLda
+
+predLda<-predict(modelLda,training10)
+confusionMatrix(predLda,training10$classe)
+
+```
+
+The Linear Discriminant Analysis model has an accuracy of about 70%.
+
+**Comparing the accuracy of the different models we decide to use the RANDOM FOREST model to predict the 20 cases for the programming assignment part of the Course Project**
+
+### Out of sample error rate:
+
+To obtain the estimate of out of sample erros we fit the modelrf (the Random Forest model) to the TESTING90 data, i.e the data not used in the estimation itself that was reserved for cross validation
+
+```{r}
+
+predrf<-predict(modelrf,testing90)
+confusionMatrix(predrf,testing90$classe)
+
+```
+
+**We can see from the results above that the Random Forest model should get about 94% of the cases right. So we estimate that of the 20 test cases provided the model should identify correctly 19 of them with 95% confidence**
+
+
+**Using the Random Forest model to predicting the TESTING data obtains the following classes:**
+
+```{r}
+
+predict(modelrf,testing)
+
+```
+
+### References:
+
+VELLOSO, E. et alli (2013). Qualitative Activity Recognition of Weight Lifting Exercises. Proccedings of the 4th International Conference in Cooperation with SIGCHI, Stuttgard, Germany.
